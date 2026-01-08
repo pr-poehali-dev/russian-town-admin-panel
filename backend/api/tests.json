@@ -1,0 +1,31 @@
+{
+  "tests": [
+    {
+      "name": "Get all users",
+      "method": "GET",
+      "path": "/?action=users",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Get all posts",
+      "method": "GET",
+      "path": "/?action=posts",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Login with correct credentials",
+      "method": "POST",
+      "path": "/?action=login",
+      "body": {
+        "username": "TOURIST_WAGNERA",
+        "password": "wagnera_tut$45$"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "username": "TOURIST_WAGNERA",
+        "role": "owner"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

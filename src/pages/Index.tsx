@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,30 +12,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
+import { api } from '@/lib/api';
 
 type UserRole = 'user' | 'admin_junior' | 'admin' | 'admin_senior' | 'owner';
 type FactionType = 'open' | 'closed' | 'criminal';
 
 interface User {
-  id: string;
+  id: number;
   username: string;
-  password: string;
   role: UserRole;
   faction?: string;
-  customRole?: string;
+  custom_role?: string;
   status?: string;
   avatar?: string;
-  isBanned?: boolean;
-  isMuted?: boolean;
+  is_banned?: boolean;
+  is_muted?: boolean;
 }
 
 interface Post {
-  id: string;
+  id: number;
   author: string;
   title: string;
   content: string;
-  date: string;
-  authorAvatar?: string;
+  created_at: string;
+  author_avatar?: string;
 }
 
 interface Faction {
@@ -71,25 +71,9 @@ const admins = [
 const Index = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoginMode, setIsLoginMode] = useState(true);
-  const [users, setUsers] = useState<User[]>([
-    {
-      id: '1',
-      username: 'TOURIST_WAGNERA',
-      password: 'wagnera_tut$45$',
-      role: 'owner',
-      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner',
-    },
-  ]);
-  const [posts, setPosts] = useState<Post[]>([
-    {
-      id: '1',
-      author: 'TOURIST_WAGNERA',
-      title: 'Добро пожаловать на Russian Town!',
-      content: 'Рады приветствовать вас на официальном сайте сервера Russian Town в Brick Rigs!',
-      date: new Date().toISOString(),
-      authorAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner',
-    },
-  ]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [registerForm, setRegisterForm] = useState({ username: '', password: '', confirmPassword: '' });
@@ -98,97 +82,144 @@ const Index = () => {
   const [adminCodeInput, setAdminCodeInput] = useState('');
   const [newAvatarUrl, setNewAvatarUrl] = useState('');
 
-  const handleLogin = () => {
-    const user = users.find(u => u.username === loginForm.username && u.password === loginForm.password);
-    if (user) {
-      if (user.isBanned) {
-        toast.error('Ваш аккаунт заблокирован');
-        return;
-      }
-      if (user.role !== 'owner' && user.role !== 'user') {
-        if (adminCodeInput !== adminCode) {
-          toast.error('Неверный админ-код');
-          return;
-        }
-      }
-      setCurrentUser(user);
-      toast.success(`Добро пожаловать, ${user.username}!`);
-    } else {
-      toast.error('Неверное имя пользователя или пароль');
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [usersData, postsData] = await Promise.all([api.getUsers(), api.getPosts()]);
+      setUsers(usersData);
+      setPosts(postsData);
+    } catch (error) {
+      toast.error('Ошибка загрузки данных');
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleRegister = () => {
+  const handleLogin = async () => {
+    try {
+      const user = await api.login(loginForm.username, loginForm.password);
+      setCurrentUser(user);
+      toast.success(`Добро пожаловать, ${user.username}!`);
+      await loadData();
+    } catch (error: any) {
+      toast.error(error.message || 'Ошибка входа');
+    }
+  };
+
+  const handleRegister = async () => {
     if (registerForm.password !== registerForm.confirmPassword) {
       toast.error('Пароли не совпадают');
       return;
     }
-    if (users.find(u => u.username === registerForm.username)) {
-      toast.error('Пользователь с таким именем уже существует');
-      return;
+    try {
+      await api.register(registerForm.username, registerForm.password, adminCodeInput || undefined);
+      toast.success('Регистрация успешна! Теперь вы можете войти.');
+      setIsLoginMode(true);
+      setRegisterForm({ username: '', password: '', confirmPassword: '' });
+      setAdminCodeInput('');
+      await loadData();
+    } catch (error: any) {
+      toast.error(error.message || 'Ошибка регистрации');
     }
-    const newUser: User = {
-      id: Date.now().toString(),
-      username: registerForm.username,
-      password: registerForm.password,
-      role: 'user',
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${registerForm.username}`,
-    };
-    setUsers([...users, newUser]);
-    toast.success('Регистрация успешна! Теперь вы можете войти.');
-    setIsLoginMode(true);
   };
 
-  const handleCreatePost = () => {
+  const handleCreatePost = async () => {
     if (!currentUser) return;
-    const post: Post = {
-      id: Date.now().toString(),
-      author: currentUser.username,
-      title: newPost.title,
-      content: newPost.content,
-      date: new Date().toISOString(),
-      authorAvatar: currentUser.avatar,
-    };
-    setPosts([post, ...posts]);
-    setNewPost({ title: '', content: '' });
-    toast.success('Пост создан!');
+    try {
+      await api.createPost(currentUser.id, newPost.title, newPost.content);
+      setNewPost({ title: '', content: '' });
+      toast.success('Пост создан!');
+      await loadData();
+    } catch (error) {
+      toast.error('Ошибка создания поста');
+    }
   };
 
-  const handleBanUser = (userId: string) => {
-    setUsers(users.map(u => u.id === userId ? { ...u, isBanned: !u.isBanned } : u));
-    toast.success('Статус пользователя изменен');
+  const handleBanUser = async (userId: number) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    try {
+      await api.banUser(userId, !user.is_banned);
+      toast.success('Статус пользователя изменен');
+      await loadData();
+    } catch (error) {
+      toast.error('Ошибка изменения статуса');
+    }
   };
 
-  const handleMuteUser = (userId: string) => {
-    setUsers(users.map(u => u.id === userId ? { ...u, isMuted: !u.isMuted } : u));
-    toast.success('Статус мута изменен');
+  const handleMuteUser = async (userId: number) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    try {
+      await api.muteUser(userId, !user.is_muted);
+      toast.success('Статус мута изменен');
+      await loadData();
+    } catch (error) {
+      toast.error('Ошибка изменения статуса мута');
+    }
   };
 
-  const handleDeleteUser = (userId: string) => {
-    setUsers(users.filter(u => u.id !== userId));
-    toast.success('Пользователь удален');
+  const handleDeleteUser = async (userId: number) => {
+    try {
+      await api.deleteUser(userId);
+      toast.success('Пользователь заблокирован');
+      await loadData();
+    } catch (error) {
+      toast.error('Ошибка удаления пользователя');
+    }
   };
 
-  const handleAssignRole = (userId: string, role: UserRole) => {
-    setUsers(users.map(u => u.id === userId ? { ...u, role } : u));
-    toast.success('Роль назначена');
+  const handleAssignRole = async (userId: number, role: UserRole) => {
+    try {
+      await api.updateRole(userId, role);
+      toast.success('Роль назначена');
+      await loadData();
+    } catch (error) {
+      toast.error('Ошибка назначения роли');
+    }
   };
 
-  const handleAssignFaction = (userId: string, faction: string) => {
-    setUsers(users.map(u => u.id === userId ? { ...u, faction } : u));
-    toast.success('Фракция назначена');
+  const handleAssignFaction = async (userId: number, faction: string) => {
+    try {
+      await api.updateFaction(userId, faction);
+      toast.success('Фракция назначена');
+      await loadData();
+    } catch (error) {
+      toast.error('Ошибка назначения фракции');
+    }
   };
 
-  const handleUpdateAvatar = () => {
+  const handleUpdateAvatar = async () => {
     if (!currentUser || !newAvatarUrl) return;
-    setCurrentUser({ ...currentUser, avatar: newAvatarUrl });
-    setUsers(users.map(u => u.id === currentUser.id ? { ...u, avatar: newAvatarUrl } : u));
-    setNewAvatarUrl('');
-    toast.success('Аватар обновлен!');
+    try {
+      await api.updateAvatar(currentUser.id, newAvatarUrl);
+      setCurrentUser({ ...currentUser, avatar: newAvatarUrl });
+      setNewAvatarUrl('');
+      toast.success('Аватар обновлен!');
+      await loadData();
+    } catch (error) {
+      toast.error('Ошибка обновления аватара');
+    }
   };
 
   const canAccessAdminPanel = currentUser && ['admin_junior', 'admin', 'admin_senior', 'owner'].includes(currentUser.role);
   const isOwner = currentUser?.role === 'owner';
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Icon name="Loader2" size={48} className="animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return (
@@ -365,10 +396,10 @@ const Index = () => {
                         <Input value={currentUser.faction} disabled />
                       </div>
                     )}
-                    {currentUser.customRole && (
+                    {currentUser.custom_role && (
                       <div>
                         <Label>Кастомная роль</Label>
-                        <Input value={currentUser.customRole} disabled />
+                        <Input value={currentUser.custom_role} disabled />
                       </div>
                     )}
                     {currentUser.status && (
@@ -501,14 +532,14 @@ const Index = () => {
                   <Card key={post.id} className="p-4 hover:border-primary/50 transition-colors">
                     <div className="flex items-start gap-4">
                       <Avatar>
-                        <AvatarImage src={post.authorAvatar} />
+                        <AvatarImage src={post.author_avatar} />
                         <AvatarFallback>{post.author[0]}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="font-bold">{post.author}</span>
                           <span className="text-sm text-muted-foreground">
-                            {new Date(post.date).toLocaleDateString('ru-RU')}
+                            {new Date(post.created_at).toLocaleDateString('ru-RU')}
                           </span>
                         </div>
                         <h3 className="text-xl font-bold mb-2">{post.title}</h3>
@@ -690,27 +721,27 @@ const Index = () => {
                             <div className="font-bold">{user.username}</div>
                             <div className="flex gap-2 mt-1">
                               <Badge variant="outline">{user.role}</Badge>
-                              {user.isBanned && <Badge variant="destructive">Забанен</Badge>}
-                              {user.isMuted && <Badge variant="secondary">Замучен</Badge>}
+                              {user.is_banned && <Badge variant="destructive">Забанен</Badge>}
+                              {user.is_muted && <Badge variant="secondary">Замучен</Badge>}
                             </div>
                           </div>
                         </div>
                         <div className="flex gap-2 flex-wrap">
                           <Button
                             size="sm"
-                            variant={user.isBanned ? 'outline' : 'destructive'}
+                            variant={user.is_banned ? 'outline' : 'destructive'}
                             onClick={() => handleBanUser(user.id)}
                           >
                             <Icon name="Ban" size={14} className="mr-1" />
-                            {user.isBanned ? 'Разбанить' : 'Забанить'}
+                            {user.is_banned ? 'Разбанить' : 'Забанить'}
                           </Button>
                           <Button
                             size="sm"
-                            variant={user.isMuted ? 'outline' : 'secondary'}
+                            variant={user.is_muted ? 'outline' : 'secondary'}
                             onClick={() => handleMuteUser(user.id)}
                           >
                             <Icon name="VolumeX" size={14} className="mr-1" />
-                            {user.isMuted ? 'Размутить' : 'Замутить'}
+                            {user.is_muted ? 'Размутить' : 'Замутить'}
                           </Button>
                         </div>
                       </div>
@@ -750,8 +781,8 @@ const Index = () => {
                                   <div className="flex gap-2 mt-1 flex-wrap">
                                     <Badge variant="outline">{user.role}</Badge>
                                     {user.faction && <Badge variant="secondary">{user.faction}</Badge>}
-                                    {user.isBanned && <Badge variant="destructive">Забанен</Badge>}
-                                    {user.isMuted && <Badge variant="secondary">Замучен</Badge>}
+                                    {user.is_banned && <Badge variant="destructive">Забанен</Badge>}
+                                    {user.is_muted && <Badge variant="secondary">Замучен</Badge>}
                                   </div>
                                 </div>
                               </div>
@@ -785,20 +816,20 @@ const Index = () => {
 
                               <Button
                                 size="sm"
-                                variant={user.isBanned ? 'outline' : 'destructive'}
+                                variant={user.is_banned ? 'outline' : 'destructive'}
                                 onClick={() => handleBanUser(user.id)}
                               >
                                 <Icon name="Ban" size={14} className="mr-1" />
-                                {user.isBanned ? 'Разбанить' : 'Бан'}
+                                {user.is_banned ? 'Разбанить' : 'Бан'}
                               </Button>
 
                               <Button
                                 size="sm"
-                                variant={user.isMuted ? 'outline' : 'secondary'}
+                                variant={user.is_muted ? 'outline' : 'secondary'}
                                 onClick={() => handleMuteUser(user.id)}
                               >
                                 <Icon name="VolumeX" size={14} className="mr-1" />
-                                {user.isMuted ? 'Размутить' : 'Мут'}
+                                {user.is_muted ? 'Размутить' : 'Мут'}
                               </Button>
 
                               <Button
