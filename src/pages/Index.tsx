@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,30 +12,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
-import { api } from '@/lib/api';
 
 type UserRole = 'user' | 'admin_junior' | 'admin' | 'admin_senior' | 'owner';
 type FactionType = 'open' | 'closed' | 'criminal';
 
 interface User {
-  id: number;
+  id: string;
   username: string;
+  password: string;
   role: UserRole;
   faction?: string;
-  custom_role?: string;
+  customRole?: string;
   status?: string;
   avatar?: string;
-  is_banned?: boolean;
-  is_muted?: boolean;
+  isBanned?: boolean;
+  isMuted?: boolean;
 }
 
 interface Post {
-  id: number;
+  id: string;
   author: string;
   title: string;
   content: string;
-  created_at: string;
-  author_avatar?: string;
+  date: string;
+  authorAvatar?: string;
 }
 
 interface Faction {
@@ -71,155 +71,115 @@ const admins = [
 const Index = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoginMode, setIsLoginMode] = useState(true);
-  const [users, setUsers] = useState<User[]>([]);
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<User[]>([
+    {
+      id: '1',
+      username: 'TOURIST_WAGNERA',
+      password: 'wagnera_tut$45$',
+      role: 'owner',
+      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner',
+    },
+  ]);
+  const [posts, setPosts] = useState<Post[]>([
+    {
+      id: '1',
+      author: 'TOURIST_WAGNERA',
+      title: 'Добро пожаловать на Russian Town!',
+      content: 'Рады приветствовать вас на официальном сайте сервера Russian Town в Brick Rigs!',
+      date: new Date().toISOString(),
+      authorAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner',
+    },
+  ]);
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [registerForm, setRegisterForm] = useState({ username: '', password: '', confirmPassword: '' });
   const [newPost, setNewPost] = useState({ title: '', content: '' });
   const [adminCode, setAdminCode] = useState('99797');
   const [adminCodeInput, setAdminCodeInput] = useState('');
-  const [newAvatarUrl, setNewAvatarUrl] = useState('');
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [usersData, postsData] = await Promise.all([api.getUsers(), api.getPosts()]);
-      setUsers(usersData);
-      setPosts(postsData);
-    } catch (error) {
-      toast.error('Ошибка загрузки данных');
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogin = async () => {
-    try {
-      const user = await api.login(loginForm.username, loginForm.password);
+  const handleLogin = () => {
+    const user = users.find(u => u.username === loginForm.username && u.password === loginForm.password);
+    if (user) {
+      if (user.isBanned) {
+        toast.error('Ваш аккаунт заблокирован');
+        return;
+      }
+      if (user.role !== 'owner' && user.role !== 'user') {
+        if (adminCodeInput !== adminCode) {
+          toast.error('Неверный админ-код');
+          return;
+        }
+      }
       setCurrentUser(user);
       toast.success(`Добро пожаловать, ${user.username}!`);
-      await loadData();
-    } catch (error: any) {
-      toast.error(error.message || 'Ошибка входа');
+    } else {
+      toast.error('Неверное имя пользователя или пароль');
     }
   };
 
-  const handleRegister = async () => {
+  const handleRegister = () => {
     if (registerForm.password !== registerForm.confirmPassword) {
       toast.error('Пароли не совпадают');
       return;
     }
-    try {
-      await api.register(registerForm.username, registerForm.password, adminCodeInput || undefined);
-      toast.success('Регистрация успешна! Теперь вы можете войти.');
-      setIsLoginMode(true);
-      setRegisterForm({ username: '', password: '', confirmPassword: '' });
-      setAdminCodeInput('');
-      await loadData();
-    } catch (error: any) {
-      toast.error(error.message || 'Ошибка регистрации');
+    if (users.find(u => u.username === registerForm.username)) {
+      toast.error('Пользователь с таким именем уже существует');
+      return;
     }
+    const newUser: User = {
+      id: Date.now().toString(),
+      username: registerForm.username,
+      password: registerForm.password,
+      role: 'user',
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${registerForm.username}`,
+    };
+    setUsers([...users, newUser]);
+    toast.success('Регистрация успешна! Теперь вы можете войти.');
+    setIsLoginMode(true);
   };
 
-  const handleCreatePost = async () => {
+  const handleCreatePost = () => {
     if (!currentUser) return;
-    try {
-      await api.createPost(currentUser.id, newPost.title, newPost.content);
-      setNewPost({ title: '', content: '' });
-      toast.success('Пост создан!');
-      await loadData();
-    } catch (error) {
-      toast.error('Ошибка создания поста');
-    }
+    const post: Post = {
+      id: Date.now().toString(),
+      author: currentUser.username,
+      title: newPost.title,
+      content: newPost.content,
+      date: new Date().toISOString(),
+      authorAvatar: currentUser.avatar,
+    };
+    setPosts([post, ...posts]);
+    setNewPost({ title: '', content: '' });
+    toast.success('Пост создан!');
   };
 
-  const handleBanUser = async (userId: number) => {
-    const user = users.find(u => u.id === userId);
-    if (!user) return;
-    try {
-      await api.banUser(userId, !user.is_banned);
-      toast.success('Статус пользователя изменен');
-      await loadData();
-    } catch (error) {
-      toast.error('Ошибка изменения статуса');
-    }
+  const handleBanUser = (userId: string) => {
+    setUsers(users.map(u => u.id === userId ? { ...u, isBanned: !u.isBanned } : u));
+    toast.success('Статус пользователя изменен');
   };
 
-  const handleMuteUser = async (userId: number) => {
-    const user = users.find(u => u.id === userId);
-    if (!user) return;
-    try {
-      await api.muteUser(userId, !user.is_muted);
-      toast.success('Статус мута изменен');
-      await loadData();
-    } catch (error) {
-      toast.error('Ошибка изменения статуса мута');
-    }
+  const handleMuteUser = (userId: string) => {
+    setUsers(users.map(u => u.id === userId ? { ...u, isMuted: !u.isMuted } : u));
+    toast.success('Статус мута изменен');
   };
 
-  const handleDeleteUser = async (userId: number) => {
-    try {
-      await api.deleteUser(userId);
-      toast.success('Пользователь заблокирован');
-      await loadData();
-    } catch (error) {
-      toast.error('Ошибка удаления пользователя');
-    }
+  const handleDeleteUser = (userId: string) => {
+    setUsers(users.filter(u => u.id !== userId));
+    toast.success('Пользователь удален');
   };
 
-  const handleAssignRole = async (userId: number, role: UserRole) => {
-    try {
-      await api.updateRole(userId, role);
-      toast.success('Роль назначена');
-      await loadData();
-    } catch (error) {
-      toast.error('Ошибка назначения роли');
-    }
+  const handleAssignRole = (userId: string, role: UserRole) => {
+    setUsers(users.map(u => u.id === userId ? { ...u, role } : u));
+    toast.success('Роль назначена');
   };
 
-  const handleAssignFaction = async (userId: number, faction: string) => {
-    try {
-      await api.updateFaction(userId, faction);
-      toast.success('Фракция назначена');
-      await loadData();
-    } catch (error) {
-      toast.error('Ошибка назначения фракции');
-    }
-  };
-
-  const handleUpdateAvatar = async () => {
-    if (!currentUser || !newAvatarUrl) return;
-    try {
-      await api.updateAvatar(currentUser.id, newAvatarUrl);
-      setCurrentUser({ ...currentUser, avatar: newAvatarUrl });
-      setNewAvatarUrl('');
-      toast.success('Аватар обновлен!');
-      await loadData();
-    } catch (error) {
-      toast.error('Ошибка обновления аватара');
-    }
+  const handleAssignFaction = (userId: string, faction: string) => {
+    setUsers(users.map(u => u.id === userId ? { ...u, faction } : u));
+    toast.success('Фракция назначена');
   };
 
   const canAccessAdminPanel = currentUser && ['admin_junior', 'admin', 'admin_senior', 'owner'].includes(currentUser.role);
   const isOwner = currentUser?.role === 'owner';
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Icon name="Loader2" size={48} className="animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Загрузка...</p>
-        </div>
-      </div>
-    );
-  }
 
   if (!currentUser) {
     return (
@@ -366,23 +326,6 @@ const Index = () => {
                       </Avatar>
                     </div>
                     <div>
-                      <Label>Изменить аватар</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={newAvatarUrl}
-                          onChange={(e) => setNewAvatarUrl(e.target.value)}
-                          placeholder="Вставьте URL изображения"
-                        />
-                        <Button onClick={handleUpdateAvatar} size="sm">
-                          <Icon name="Check" size={16} />
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Можно использовать любое изображение из интернета
-                      </p>
-                    </div>
-                    <Separator />
-                    <div>
                       <Label>Имя пользователя</Label>
                       <Input value={currentUser.username} disabled />
                     </div>
@@ -396,10 +339,10 @@ const Index = () => {
                         <Input value={currentUser.faction} disabled />
                       </div>
                     )}
-                    {currentUser.custom_role && (
+                    {currentUser.customRole && (
                       <div>
                         <Label>Кастомная роль</Label>
-                        <Input value={currentUser.custom_role} disabled />
+                        <Input value={currentUser.customRole} disabled />
                       </div>
                     )}
                     {currentUser.status && (
@@ -532,14 +475,14 @@ const Index = () => {
                   <Card key={post.id} className="p-4 hover:border-primary/50 transition-colors">
                     <div className="flex items-start gap-4">
                       <Avatar>
-                        <AvatarImage src={post.author_avatar} />
+                        <AvatarImage src={post.authorAvatar} />
                         <AvatarFallback>{post.author[0]}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="font-bold">{post.author}</span>
                           <span className="text-sm text-muted-foreground">
-                            {new Date(post.created_at).toLocaleDateString('ru-RU')}
+                            {new Date(post.date).toLocaleDateString('ru-RU')}
                           </span>
                         </div>
                         <h3 className="text-xl font-bold mb-2">{post.title}</h3>
@@ -705,11 +648,8 @@ const Index = () => {
                   <Icon name="Settings" size={28} className="text-destructive" />
                   Панель администратора
                 </h2>
-                <p className="text-muted-foreground mb-4">
-                  Доступ к модерации пользователей: бан и мут
-                </p>
                 <div className="space-y-4">
-                  {users.filter(u => u.id !== currentUser.id && u.role !== 'owner').map((user) => (
+                  {users.filter(u => u.id !== currentUser.id).map((user) => (
                     <Card key={user.id} className="p-4 bg-muted/30">
                       <div className="flex items-center justify-between flex-wrap gap-4">
                         <div className="flex items-center gap-3">
@@ -719,29 +659,23 @@ const Index = () => {
                           </Avatar>
                           <div>
                             <div className="font-bold">{user.username}</div>
-                            <div className="flex gap-2 mt-1">
-                              <Badge variant="outline">{user.role}</Badge>
-                              {user.is_banned && <Badge variant="destructive">Забанен</Badge>}
-                              {user.is_muted && <Badge variant="secondary">Замучен</Badge>}
-                            </div>
+                            <Badge variant="outline">{user.role}</Badge>
                           </div>
                         </div>
                         <div className="flex gap-2 flex-wrap">
                           <Button
                             size="sm"
-                            variant={user.is_banned ? 'outline' : 'destructive'}
+                            variant={user.isBanned ? 'default' : 'destructive'}
                             onClick={() => handleBanUser(user.id)}
                           >
-                            <Icon name="Ban" size={14} className="mr-1" />
-                            {user.is_banned ? 'Разбанить' : 'Забанить'}
+                            {user.isBanned ? 'Разбанить' : 'Забанить'}
                           </Button>
                           <Button
                             size="sm"
-                            variant={user.is_muted ? 'outline' : 'secondary'}
+                            variant={user.isMuted ? 'default' : 'secondary'}
                             onClick={() => handleMuteUser(user.id)}
                           >
-                            <Icon name="VolumeX" size={14} className="mr-1" />
-                            {user.is_muted ? 'Размутить' : 'Замутить'}
+                            {user.isMuted ? 'Размутить' : 'Замутить'}
                           </Button>
                         </div>
                       </div>
@@ -762,87 +696,53 @@ const Index = () => {
 
                 <div className="space-y-6">
                   <Card className="p-4 bg-accent/5">
-                    <h3 className="font-bold mb-4">Полное управление пользователями</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Назначение администраторов, фракций, модерация и удаление
-                    </p>
+                    <h3 className="font-bold mb-4">Управление администраторами</h3>
                     <div className="space-y-4">
                       {users.filter(u => u.id !== currentUser.id).map((user) => (
-                        <Card key={user.id} className="p-4 bg-muted/20">
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between flex-wrap gap-4">
-                              <div className="flex items-center gap-3">
-                                <Avatar>
-                                  <AvatarImage src={user.avatar} />
-                                  <AvatarFallback>{user.username[0]}</AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <div className="font-bold">{user.username}</div>
-                                  <div className="flex gap-2 mt-1 flex-wrap">
-                                    <Badge variant="outline">{user.role}</Badge>
-                                    {user.faction && <Badge variant="secondary">{user.faction}</Badge>}
-                                    {user.is_banned && <Badge variant="destructive">Забанен</Badge>}
-                                    {user.is_muted && <Badge variant="secondary">Замучен</Badge>}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            <div className="flex gap-2 flex-wrap">
-                              <Select onValueChange={(role) => handleAssignRole(user.id, role as UserRole)}>
-                                <SelectTrigger className="w-[180px]">
-                                  <SelectValue placeholder="Назначить роль" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="user">Пользователь</SelectItem>
-                                  <SelectItem value="admin_junior">Младший админ</SelectItem>
-                                  <SelectItem value="admin">Администратор</SelectItem>
-                                  <SelectItem value="admin_senior">Старший админ</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              
-                              <Select onValueChange={(faction) => handleAssignFaction(user.id, faction)}>
-                                <SelectTrigger className="w-[180px]">
-                                  <SelectValue placeholder="Фракция" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {factions.map((f) => (
-                                    <SelectItem key={f.name} value={f.name}>
-                                      {f.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-
-                              <Button
-                                size="sm"
-                                variant={user.is_banned ? 'outline' : 'destructive'}
-                                onClick={() => handleBanUser(user.id)}
-                              >
-                                <Icon name="Ban" size={14} className="mr-1" />
-                                {user.is_banned ? 'Разбанить' : 'Бан'}
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant={user.is_muted ? 'outline' : 'secondary'}
-                                onClick={() => handleMuteUser(user.id)}
-                              >
-                                <Icon name="VolumeX" size={14} className="mr-1" />
-                                {user.is_muted ? 'Размутить' : 'Мут'}
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => handleDeleteUser(user.id)}
-                              >
-                                <Icon name="Trash2" size={14} className="mr-1" />
-                                Удалить
-                              </Button>
+                        <div key={user.id} className="flex items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage src={user.avatar} />
+                              <AvatarFallback>{user.username[0]}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-bold">{user.username}</div>
+                              <Badge variant="outline">{user.role}</Badge>
                             </div>
                           </div>
-                        </Card>
+                          <div className="flex gap-2 flex-wrap">
+                            <Select onValueChange={(role) => handleAssignRole(user.id, role as UserRole)}>
+                              <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Назначить роль" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="user">Пользователь</SelectItem>
+                                <SelectItem value="admin_junior">Младший админ</SelectItem>
+                                <SelectItem value="admin">Администратор</SelectItem>
+                                <SelectItem value="admin_senior">Старший админ</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Select onValueChange={(faction) => handleAssignFaction(user.id, faction)}>
+                              <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Назначить фракцию" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {factions.map((f) => (
+                                  <SelectItem key={f.name} value={f.name}>
+                                    {f.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteUser(user.id)}
+                            >
+                              <Icon name="Trash2" size={16} />
+                            </Button>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </Card>
