@@ -96,6 +96,7 @@ const Index = () => {
   const [newPost, setNewPost] = useState({ title: '', content: '' });
   const [adminCode, setAdminCode] = useState('99797');
   const [adminCodeInput, setAdminCodeInput] = useState('');
+  const [newAvatarUrl, setNewAvatarUrl] = useState('');
 
   const handleLogin = () => {
     const user = users.find(u => u.username === loginForm.username && u.password === loginForm.password);
@@ -176,6 +177,14 @@ const Index = () => {
   const handleAssignFaction = (userId: string, faction: string) => {
     setUsers(users.map(u => u.id === userId ? { ...u, faction } : u));
     toast.success('Фракция назначена');
+  };
+
+  const handleUpdateAvatar = () => {
+    if (!currentUser || !newAvatarUrl) return;
+    setCurrentUser({ ...currentUser, avatar: newAvatarUrl });
+    setUsers(users.map(u => u.id === currentUser.id ? { ...u, avatar: newAvatarUrl } : u));
+    setNewAvatarUrl('');
+    toast.success('Аватар обновлен!');
   };
 
   const canAccessAdminPanel = currentUser && ['admin_junior', 'admin', 'admin_senior', 'owner'].includes(currentUser.role);
@@ -325,6 +334,23 @@ const Index = () => {
                         <AvatarFallback>{currentUser.username[0]}</AvatarFallback>
                       </Avatar>
                     </div>
+                    <div>
+                      <Label>Изменить аватар</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={newAvatarUrl}
+                          onChange={(e) => setNewAvatarUrl(e.target.value)}
+                          placeholder="Вставьте URL изображения"
+                        />
+                        <Button onClick={handleUpdateAvatar} size="sm">
+                          <Icon name="Check" size={16} />
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Можно использовать любое изображение из интернета
+                      </p>
+                    </div>
+                    <Separator />
                     <div>
                       <Label>Имя пользователя</Label>
                       <Input value={currentUser.username} disabled />
@@ -648,8 +674,11 @@ const Index = () => {
                   <Icon name="Settings" size={28} className="text-destructive" />
                   Панель администратора
                 </h2>
+                <p className="text-muted-foreground mb-4">
+                  Доступ к модерации пользователей: бан и мут
+                </p>
                 <div className="space-y-4">
-                  {users.filter(u => u.id !== currentUser.id).map((user) => (
+                  {users.filter(u => u.id !== currentUser.id && u.role !== 'owner').map((user) => (
                     <Card key={user.id} className="p-4 bg-muted/30">
                       <div className="flex items-center justify-between flex-wrap gap-4">
                         <div className="flex items-center gap-3">
@@ -659,22 +688,28 @@ const Index = () => {
                           </Avatar>
                           <div>
                             <div className="font-bold">{user.username}</div>
-                            <Badge variant="outline">{user.role}</Badge>
+                            <div className="flex gap-2 mt-1">
+                              <Badge variant="outline">{user.role}</Badge>
+                              {user.isBanned && <Badge variant="destructive">Забанен</Badge>}
+                              {user.isMuted && <Badge variant="secondary">Замучен</Badge>}
+                            </div>
                           </div>
                         </div>
                         <div className="flex gap-2 flex-wrap">
                           <Button
                             size="sm"
-                            variant={user.isBanned ? 'default' : 'destructive'}
+                            variant={user.isBanned ? 'outline' : 'destructive'}
                             onClick={() => handleBanUser(user.id)}
                           >
+                            <Icon name="Ban" size={14} className="mr-1" />
                             {user.isBanned ? 'Разбанить' : 'Забанить'}
                           </Button>
                           <Button
                             size="sm"
-                            variant={user.isMuted ? 'default' : 'secondary'}
+                            variant={user.isMuted ? 'outline' : 'secondary'}
                             onClick={() => handleMuteUser(user.id)}
                           >
+                            <Icon name="VolumeX" size={14} className="mr-1" />
                             {user.isMuted ? 'Размутить' : 'Замутить'}
                           </Button>
                         </div>
@@ -696,53 +731,87 @@ const Index = () => {
 
                 <div className="space-y-6">
                   <Card className="p-4 bg-accent/5">
-                    <h3 className="font-bold mb-4">Управление администраторами</h3>
+                    <h3 className="font-bold mb-4">Полное управление пользователями</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Назначение администраторов, фракций, модерация и удаление
+                    </p>
                     <div className="space-y-4">
                       {users.filter(u => u.id !== currentUser.id).map((user) => (
-                        <div key={user.id} className="flex items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <Avatar>
-                              <AvatarImage src={user.avatar} />
-                              <AvatarFallback>{user.username[0]}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <div className="font-bold">{user.username}</div>
-                              <Badge variant="outline">{user.role}</Badge>
+                        <Card key={user.id} className="p-4 bg-muted/20">
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between flex-wrap gap-4">
+                              <div className="flex items-center gap-3">
+                                <Avatar>
+                                  <AvatarImage src={user.avatar} />
+                                  <AvatarFallback>{user.username[0]}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <div className="font-bold">{user.username}</div>
+                                  <div className="flex gap-2 mt-1 flex-wrap">
+                                    <Badge variant="outline">{user.role}</Badge>
+                                    {user.faction && <Badge variant="secondary">{user.faction}</Badge>}
+                                    {user.isBanned && <Badge variant="destructive">Забанен</Badge>}
+                                    {user.isMuted && <Badge variant="secondary">Замучен</Badge>}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex gap-2 flex-wrap">
+                              <Select onValueChange={(role) => handleAssignRole(user.id, role as UserRole)}>
+                                <SelectTrigger className="w-[180px]">
+                                  <SelectValue placeholder="Назначить роль" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="user">Пользователь</SelectItem>
+                                  <SelectItem value="admin_junior">Младший админ</SelectItem>
+                                  <SelectItem value="admin">Администратор</SelectItem>
+                                  <SelectItem value="admin_senior">Старший админ</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              
+                              <Select onValueChange={(faction) => handleAssignFaction(user.id, faction)}>
+                                <SelectTrigger className="w-[180px]">
+                                  <SelectValue placeholder="Фракция" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {factions.map((f) => (
+                                    <SelectItem key={f.name} value={f.name}>
+                                      {f.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
+                              <Button
+                                size="sm"
+                                variant={user.isBanned ? 'outline' : 'destructive'}
+                                onClick={() => handleBanUser(user.id)}
+                              >
+                                <Icon name="Ban" size={14} className="mr-1" />
+                                {user.isBanned ? 'Разбанить' : 'Бан'}
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant={user.isMuted ? 'outline' : 'secondary'}
+                                onClick={() => handleMuteUser(user.id)}
+                              >
+                                <Icon name="VolumeX" size={14} className="mr-1" />
+                                {user.isMuted ? 'Размутить' : 'Мут'}
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDeleteUser(user.id)}
+                              >
+                                <Icon name="Trash2" size={14} className="mr-1" />
+                                Удалить
+                              </Button>
                             </div>
                           </div>
-                          <div className="flex gap-2 flex-wrap">
-                            <Select onValueChange={(role) => handleAssignRole(user.id, role as UserRole)}>
-                              <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Назначить роль" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="user">Пользователь</SelectItem>
-                                <SelectItem value="admin_junior">Младший админ</SelectItem>
-                                <SelectItem value="admin">Администратор</SelectItem>
-                                <SelectItem value="admin_senior">Старший админ</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Select onValueChange={(faction) => handleAssignFaction(user.id, faction)}>
-                              <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Назначить фракцию" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {factions.map((f) => (
-                                  <SelectItem key={f.name} value={f.name}>
-                                    {f.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleDeleteUser(user.id)}
-                            >
-                              <Icon name="Trash2" size={16} />
-                            </Button>
-                          </div>
-                        </div>
+                        </Card>
                       ))}
                     </div>
                   </Card>
